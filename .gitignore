@@ -1,0 +1,19 @@
+# Build artifacts
+target/
+artifacts/
+
+# IDE / editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Claude Code
+.claude/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Internal docs
+docs/
