@@ -1,9 +1,7 @@
 use cosmwasm_std::{
-    entry_point, to_json_binary, to_json_vec, BankMsg, Binary, Coin, Deps, DepsMut,
-    Env, MessageInfo, Response, StdError, StdResult, Uint128, Uint256, QueryRequest, GrpcQuery,
-    ContractResult, SystemResult,
+    entry_point, to_json_binary, BankMsg, Binary, Coin, Deps, DepsMut,
+    Env, MessageInfo, Response, StdError, StdResult, Uint128, Uint256,
 };
-use prost::Message;
 use cw2::{get_contract_version, set_contract_version};
 
 use crate::error::ContractError;
@@ -15,44 +13,8 @@ use crate::state::{
     Config, Tranche, CONFIG, TRANCHES, NUM_TRANCHES, TRANCHE_GNK_AMOUNTS, TRANCHE_UNLOCK_OFFSETS,
 };
 
-#[derive(Clone, PartialEq, Message)]
-pub struct QueryTotalSupplyRequest {}
-
-#[derive(Clone, PartialEq, Message)]
-pub struct QueryTotalSupplyResponse {
-    #[prost(message, repeated, tag = "1")]
-    pub supply: ::prost::alloc::vec::Vec<CoinProto>,
-}
-
-#[derive(Clone, PartialEq, Message)]
-pub struct CoinProto {
-    #[prost(string, tag = "1")]
-    pub denom: String,
-    #[prost(string, tag = "2")]
-    pub amount: String,
-}
-
 const CONTRACT_NAME: &str = "gonka-thesoul-vesting";
 const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
-
-fn get_native_denom(deps: Deps) -> Result<String, ContractError> {
-    let request = QueryTotalSupplyRequest {};
-    match query_proto::<QueryTotalSupplyRequest, QueryTotalSupplyResponse>(
-        deps,
-        "/cosmos.bank.v1beta1.Query/TotalSupply",
-        &request,
-    ) {
-        Ok(response) => {
-            if let Some(coin) = response.supply.first() {
-                if !coin.denom.is_empty() {
-                    return Ok(coin.denom.clone());
-                }
-            }
-            Ok("ngonka".to_string())
-        }
-        Err(_) => Ok("ngonka".to_string()),
-    }
-}
 
 #[entry_point]
 pub fn instantiate(
@@ -67,7 +29,10 @@ pub fn instantiate(
     let admin = deps.api.addr_validate(&msg.admin)?.to_string();
     let recipient = deps.api.addr_validate(&msg.recipient)?.to_string();
 
-    let native_denom = get_native_denom(deps.as_ref())?;
+    if msg.native_denom.is_empty() {
+        return Err(ContractError::Std(StdError::msg("native_denom must not be empty")));
+    }
+    let native_denom = msg.native_denom;
     let start_time = env.block.time.seconds();
 
     let config = Config {
@@ -337,34 +302,6 @@ fn query_native_balance(deps: Deps, env: Env) -> StdResult<NativeBalanceResponse
     Ok(NativeBalanceResponse { balance })
 }
 
-fn query_grpc(deps: Deps, path: &str, data: Binary) -> StdResult<Binary> {
-    let request = QueryRequest::Grpc(GrpcQuery {
-        path: path.to_string(),
-        data,
-    });
-    query_raw(deps, &request)
-}
-
-fn query_raw(deps: Deps, request: &QueryRequest<GrpcQuery>) -> StdResult<Binary> {
-    let raw = to_json_vec(request).map_err(|e| StdError::msg(format!("Serializing: {e}")))?;
-    match deps.querier.raw_query(&raw) {
-        SystemResult::Err(e) => Err(StdError::msg(format!("System error: {e}"))),
-        SystemResult::Ok(ContractResult::Err(e)) => Err(StdError::msg(format!("Contract error: {e}"))),
-        SystemResult::Ok(ContractResult::Ok(value)) => Ok(value),
-    }
-}
-
-fn query_proto<TRequest, TResponse>(deps: Deps, path: &str, request: &TRequest) -> StdResult<TResponse>
-where
-    TRequest: prost::Message,
-    TResponse: prost::Message + Default,
-{
-    let mut buf = Vec::new();
-    request.encode(&mut buf).map_err(|e| StdError::msg(format!("Encode: {}", e)))?;
-    let bytes = query_grpc(deps, path, Binary::from(buf))?;
-    TResponse::decode(bytes.as_slice()).map_err(|e| StdError::msg(format!("Decode: {}", e)))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -375,6 +312,7 @@ mod tests {
         InstantiateMsg {
             admin: api.addr_make("admin").to_string(),
             recipient: api.addr_make("recipient").to_string(),
+            native_denom: "ngonka".to_string(),
         }
     }
 

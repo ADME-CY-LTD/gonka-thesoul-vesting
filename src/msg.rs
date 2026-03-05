@@ -7,6 +7,8 @@ pub struct InstantiateMsg {
     pub admin: String,
     /// Recipient address (receives GNK when tranches are released)
     pub recipient: String,
+    /// Native token denomination (e.g. "ngonka")
+    pub native_denom: String,
 }
 
 #[cw_serde]
