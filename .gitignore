@@ -1,6 +1,8 @@
 # Build artifacts
 target/
-artifacts/
+
+# inferenced CLI binary
+inferenced
 
 # IDE / editor
 .vscode/
